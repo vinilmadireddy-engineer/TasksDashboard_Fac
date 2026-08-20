@@ -783,29 +783,7 @@ else:
 # DOWNLOAD UPDATED EXCEL
 # ============================================================
 
-st.divider()
-st.markdown("### 📥 Download Updated Excel")
 
-try:
-    download_bytes = create_excel_download(df)
-    download_name = (
-        "tasks_updated_"
-        + datetime.now().strftime("%Y%m%d_%H%M%S")
-        + ".xlsx"
-    )
-
-    st.download_button(
-        label="📊 Download Updated Excel",
-        data=download_bytes,
-        file_name=download_name,
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        use_container_width=True,
-    )
-except Exception as error:
-    st.error(f"Unable to prepare the Excel download: {error}")
 
 
 # ============================================================
