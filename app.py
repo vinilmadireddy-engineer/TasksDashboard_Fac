@@ -1,7 +1,10 @@
-import streamlit as st
-import pandas as pd
-from pathlib import Path
+import time
 from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
 
 
 # ============================================================
@@ -28,18 +31,8 @@ REQUIRED_COLUMNS = [
     "Status",
 ]
 
-PRIORITY_VALUES = [
-    "Low",
-    "Medium",
-    "High",
-    "Critical",
-]
-
-STATUS_VALUES = [
-    "Open",
-    "In Progress",
-    "Close",
-]
+PRIORITY_VALUES = ["Low", "Medium", "High", "Critical"]
+STATUS_VALUES = ["Open", "In Progress", "Close"]
 
 
 # ============================================================
@@ -60,7 +53,7 @@ st.markdown(
         padding: 25px 30px;
         border-radius: 18px;
         color: white;
-        margin-bottom: 25px;
+        margin-bottom: 20px;
     }
 
     .header h1 {
@@ -103,48 +96,50 @@ st.markdown(
 
 
 # ============================================================
-# LOAD EXCEL
+# SESSION STATE
+# ============================================================
+
+if "last_save" not in st.session_state:
+    st.session_state.last_save = None
+
+if "save_message" not in st.session_state:
+    st.session_state.save_message = None
+
+if "show_completed" not in st.session_state:
+    st.session_state.show_completed = False
+
+
+# ============================================================
+# LOAD AND SAVE EXCEL
 # ============================================================
 
 @st.cache_data
 def load_excel(file_path, modified_time):
-    # modified_time is intentionally passed so the cache is invalidated
-    # whenever the workbook changes.
+    # modified_time is included to invalidate the cache when Excel changes.
     del modified_time
 
     loaded_df = pd.read_excel(
         file_path,
-        sheet_name=SHEET_NAME if SHEET_NAME else 0,
+        sheet_name=SHEET_NAME,
         engine="openpyxl",
     )
 
-    loaded_df.columns = [
-        str(column).strip()
-        for column in loaded_df.columns
-    ]
+    loaded_df.columns = [str(column).strip() for column in loaded_df.columns]
 
     missing_columns = [
-        column
-        for column in REQUIRED_COLUMNS
+        column for column in REQUIRED_COLUMNS
         if column not in loaded_df.columns
     ]
 
     if missing_columns:
         raise ValueError(
-            "Missing columns in Excel: "
-            + ", ".join(missing_columns)
+            "Missing columns in Excel: " + ", ".join(missing_columns)
         )
 
     loaded_df = loaded_df[REQUIRED_COLUMNS].copy()
-
-    loaded_df["Date"] = pd.to_datetime(
-        loaded_df["Date"],
-        errors="coerce",
-    )
-
+    loaded_df["Date"] = pd.to_datetime(loaded_df["Date"], errors="coerce")
     loaded_df["Due Date"] = pd.to_datetime(
-        loaded_df["Due Date"],
-        errors="coerce",
+        loaded_df["Due Date"], errors="coerce"
     )
 
     text_columns = [
@@ -164,24 +159,14 @@ def load_excel(file_path, modified_time):
             .str.strip()
         )
 
-    # Stable identifier used when updating filtered rows.
     loaded_df["_row_id"] = loaded_df.index
-
     return loaded_df
 
 
-# ============================================================
-# SAVE EXCEL
-# ============================================================
-
 def save_excel(dataframe):
+    """Safely save tasks and verify that the written workbook is readable."""
     save_df = dataframe.copy()
-
-    save_df = save_df.drop(
-        columns=["_row_id"],
-        errors="ignore",
-    )
-
+    save_df = save_df.drop(columns=["_row_id"], errors="ignore")
     save_df = save_df[REQUIRED_COLUMNS]
 
     temporary_file = EXCEL_FILE.with_name(
@@ -196,7 +181,19 @@ def save_excel(dataframe):
             engine="openpyxl",
         )
 
-        # Replace the source only after the temporary workbook is written.
+        # Verify the temporary workbook before replacing the active file.
+        verification_df = pd.read_excel(
+            temporary_file,
+            sheet_name=SHEET_NAME,
+            engine="openpyxl",
+        )
+
+        if len(verification_df) != len(save_df):
+            raise IOError(
+                "Excel verification failed because the saved row count "
+                "does not match the expected row count."
+            )
+
         temporary_file.replace(EXCEL_FILE)
         load_excel.clear()
 
@@ -204,17 +201,6 @@ def save_excel(dataframe):
         if temporary_file.exists():
             temporary_file.unlink()
         raise
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-
-def format_date(value):
-    if pd.isna(value):
-        return ""
-
-    return pd.Timestamp(value).strftime("%d-%b-%Y")
 
 
 def unique_non_empty_values(series):
@@ -225,6 +211,27 @@ def unique_non_empty_values(series):
             if str(value).strip()
         }
     )
+
+
+def format_date(value):
+    if pd.isna(value):
+        return ""
+    return pd.Timestamp(value).strftime("%d-%b-%Y")
+
+
+def create_excel_download(dataframe):
+    export_df = dataframe.copy()
+    export_df = export_df.drop(columns=["_row_id"], errors="ignore")
+    export_df = export_df[REQUIRED_COLUMNS]
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        export_df.to_excel(
+            writer,
+            sheet_name=SHEET_NAME,
+            index=False,
+        )
+    return output.getvalue()
 
 
 # ============================================================
@@ -241,9 +248,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# This message survives st.rerun(), so users can clearly see save success.
+if st.session_state.save_message:
+    st.success(st.session_state.save_message, icon="✅")
+
+if st.session_state.last_save:
+    st.caption(f"💾 Last successful Excel update: {st.session_state.last_save}")
+
 
 # ============================================================
-# CHECK EXCEL
+# CHECK AND READ EXCEL
 # ============================================================
 
 if not EXCEL_FILE.exists():
@@ -254,15 +268,10 @@ if not EXCEL_FILE.exists():
     )
     st.stop()
 
-
-# ============================================================
-# READ DATA
-# ============================================================
-
 try:
     df = load_excel(
         str(EXCEL_FILE),
-        EXCEL_FILE.stat().st_mtime,
+        EXCEL_FILE.stat().st_mtime_ns,
     )
 except Exception as error:
     st.error(f"Unable to read Excel file: {error}")
@@ -274,33 +283,25 @@ except Exception as error:
 # ============================================================
 
 with st.expander("➕ Add New Task", expanded=False):
-    existing_departments = unique_non_empty_values(
-        df["Department"]
-    )
+    existing_departments = unique_non_empty_values(df["Department"])
 
-    with st.form(
-        "add_task_form",
-        clear_on_submit=True,
-    ):
+    with st.form("add_task_form", clear_on_submit=True):
         add_col1, add_col2 = st.columns(2)
 
         task_name = add_col1.text_input(
             "Task / Action Item *",
             placeholder="Enter the task description",
         )
-
         responsible = add_col2.text_input(
             "Responsible",
             placeholder="Enter responsible person's name",
         )
 
         add_col3, add_col4 = st.columns(2)
-
         location = add_col3.text_input(
             "Area / Location",
             placeholder="Enter area or location",
         )
-
         department_selection = add_col4.selectbox(
             "Department",
             options=["Enter new department"] + existing_departments,
@@ -315,13 +316,11 @@ with st.expander("➕ Add New Task", expanded=False):
             department = department_selection
 
         add_col5, add_col6 = st.columns(2)
-
         priority = add_col5.selectbox(
             "Priority",
             options=PRIORITY_VALUES,
             index=1,
         )
-
         due_date = add_col6.date_input(
             "Due Date",
             value=None,
@@ -329,13 +328,11 @@ with st.expander("➕ Add New Task", expanded=False):
         )
 
         add_col7, add_col8 = st.columns(2)
-
         task_date = add_col7.date_input(
             "Task Created Date",
             value=datetime.now().date(),
             format="DD-MM-YYYY",
         )
-
         status = add_col8.selectbox(
             "Status",
             options=STATUS_VALUES,
@@ -354,14 +351,16 @@ with st.expander("➕ Add New Task", expanded=False):
 
         if not clean_task_name:
             st.error("Task / Action Item is required.")
-
         elif not clean_department:
             st.error("Department is required.")
-
         else:
-            new_task = pd.DataFrame(
-                [
-                    {
+            progress = st.progress(0, text="Preparing the new task...")
+
+            try:
+                progress.progress(25, text="Validating task details...")
+
+                new_task = pd.DataFrame(
+                    [{
                         "Date": pd.to_datetime(task_date),
                         "Task/ActionItem": clean_task_name,
                         "Responsible": responsible.strip(),
@@ -374,81 +373,65 @@ with st.expander("➕ Add New Task", expanded=False):
                             else pd.NaT
                         ),
                         "Status": status,
-                    }
-                ]
-            )
-
-            updated_df = pd.concat(
-                [
-                    df.drop(columns=["_row_id"], errors="ignore"),
-                    new_task,
-                ],
-                ignore_index=True,
-            )
-
-            try:
-                save_excel(updated_df)
-                st.success(
-                    f"✅ Task '{clean_task_name}' added successfully."
+                    }]
                 )
+
+                updated_df = pd.concat(
+                    [
+                        df.drop(columns=["_row_id"], errors="ignore"),
+                        new_task,
+                    ],
+                    ignore_index=True,
+                )
+
+                progress.progress(65, text="Writing the new task to Excel...")
+                save_excel(updated_df)
+
+                saved_at = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+                st.session_state.last_save = saved_at
+                st.session_state.save_message = (
+                    f"Task '{clean_task_name}' was added and Excel was "
+                    f"updated successfully at {saved_at}."
+                )
+
+                progress.progress(100, text="Excel updated successfully.")
+                time.sleep(0.6)
                 st.rerun()
+                
 
             except PermissionError:
+                progress.empty()
                 st.error(
-                    "Unable to update tasks.xlsx. Close the workbook "
-                    "in Microsoft Excel and try again."
+                    "Unable to update tasks.xlsx. Close the workbook in "
+                    "Microsoft Excel and try again."
                 )
-
             except Exception as error:
+                progress.empty()
                 st.error(f"Unable to add the task: {error}")
 
 
 # ============================================================
-# CALCULATE PROGRESS
+# PROGRESS SUMMARY
 # ============================================================
 
 total_tasks = len(df)
-
 completed_tasks = int(
-    df["Status"]
-    .str.casefold()
-    .eq("close")
-    .sum()
+    df["Status"].str.casefold().eq("close").sum()
 )
-
 open_tasks = total_tasks - completed_tasks
-
 completion_percentage = (
-    (completed_tasks / total_tasks) * 100
-    if total_tasks > 0
-    else 0
+    completed_tasks / total_tasks * 100 if total_tasks else 0
 )
 
-
-# ============================================================
-# TOP SECTION
-# ============================================================
-
-left_column, right_column = st.columns(
-    [1.25, 1],
-    gap="large",
-)
-
-
-# ============================================================
-# LEFT - PROGRESS
-# ============================================================
+left_column, right_column = st.columns([1.25, 1], gap="large")
 
 with left_column:
     st.markdown("### 📈 Overall Completion")
-
     st.markdown(
         f"""
         <div class="progress-container">
-            <div
-                class="progress-bar"
-                style="width:{completion_percentage:.1f}%">
-            </div>
+            <div class="progress-bar"
+                 style="width:{completion_percentage:.1f}%"></div>
         </div>
         <div class="progress-text">
             {completion_percentage:.1f}% Complete
@@ -462,11 +445,6 @@ with left_column:
     metric2.metric("Open Tasks", open_tasks)
     metric3.metric("Completed", completed_tasks)
 
-
-# ============================================================
-# RIGHT - DEPARTMENT SUMMARY
-# ============================================================
-
 with right_column:
     st.markdown("### 🏢 Department-wise Tasks")
 
@@ -474,11 +452,8 @@ with right_column:
         st.info("No tasks are available yet.")
     else:
         department_data = df.copy()
-
         department_data["Completed"] = (
-            department_data["Status"]
-            .str.casefold()
-            .eq("close")
+            department_data["Status"].str.casefold().eq("close")
         )
 
         department_summary = (
@@ -495,7 +470,6 @@ with right_column:
             department_summary["Tasks"]
             - department_summary["Completed"]
         )
-
         department_summary["Completion %"] = (
             department_summary["Completed"]
             / department_summary["Tasks"]
@@ -523,9 +497,6 @@ with right_column:
 
 st.divider()
 
-if "show_completed" not in st.session_state:
-    st.session_state.show_completed = False
-
 button_text = (
     "⬆️ Hide Completed Tasks"
     if st.session_state.show_completed
@@ -533,42 +504,26 @@ button_text = (
 )
 
 if st.button(button_text):
-    st.session_state.show_completed = (
-        not st.session_state.show_completed
-    )
+    st.session_state.show_completed = not st.session_state.show_completed
     st.rerun()
 
 if st.session_state.show_completed:
     st.markdown("### ✅ Completed Tasks")
 
     completed_df = df[
-        df["Status"]
-        .str.casefold()
-        .eq("close")
+        df["Status"].str.casefold().eq("close")
     ].copy()
 
     if completed_df.empty:
         st.info("There are no completed tasks yet.")
     else:
-        completed_df["Date"] = completed_df["Date"].apply(
-            format_date
-        )
-
+        completed_df["Date"] = completed_df["Date"].apply(format_date)
         completed_df["Due Date"] = completed_df["Due Date"].apply(
             format_date
         )
 
         completed_display = completed_df[
-            [
-                "Date",
-                "Task/ActionItem",
-                "Responsible",
-                "Area/Locations",
-                "Department",
-                "Priority",
-                "Due Date",
-                "Status",
-            ]
+            REQUIRED_COLUMNS
         ].rename(
             columns={
                 "Task/ActionItem": "Task",
@@ -586,26 +541,16 @@ if st.session_state.show_completed:
 
 
 # ============================================================
-# OPEN TASKS
+# OPEN TASKS AND FILTERS
 # ============================================================
 
 st.markdown("### 📋 Open Tasks")
 
 open_df = df[
-    ~df["Status"]
-    .str.casefold()
-    .eq("close")
+    ~df["Status"].str.casefold().eq("close")
 ].copy()
 
-
-# ============================================================
-# FILTERS
-# ============================================================
-
-with st.expander(
-    "🔎 Search & Filter Open Tasks",
-    expanded=True,
-):
+with st.expander("🔎 Search & Filter Open Tasks", expanded=True):
     filter1, filter2, filter3, filter4 = st.columns(4)
 
     search_text = filter1.text_input(
@@ -613,41 +558,21 @@ with st.expander(
         placeholder="Task, responsible, location...",
     )
 
-    department_options = unique_non_empty_values(
-        open_df["Department"]
-    )
-
-    priority_options = unique_non_empty_values(
-        open_df["Priority"]
-    )
-
-    status_options = unique_non_empty_values(
-        open_df["Status"]
-    )
+    department_options = unique_non_empty_values(open_df["Department"])
+    priority_options = unique_non_empty_values(open_df["Priority"])
+    status_options = unique_non_empty_values(open_df["Status"])
 
     selected_departments = filter2.multiselect(
-        "Department",
-        department_options,
+        "Department", department_options
     )
-
     selected_priorities = filter3.multiselect(
-        "Priority",
-        priority_options,
+        "Priority", priority_options
     )
-
     selected_statuses = filter4.multiselect(
-        "Status",
-        status_options,
+        "Status", status_options
     )
-
-
-# ============================================================
-# APPLY FILTERS
-# ============================================================
 
 if search_text:
-    search_value = search_text.casefold()
-
     search_columns = [
         "Task/ActionItem",
         "Responsible",
@@ -663,31 +588,22 @@ if search_text:
         .astype(str)
         .agg(" ".join, axis=1)
         .str.casefold()
-        .str.contains(search_value, regex=False)
+        .str.contains(search_text.casefold(), regex=False)
     )
-
     open_df = open_df[search_mask]
 
 if selected_departments:
-    open_df = open_df[
-        open_df["Department"].isin(selected_departments)
-    ]
-
+    open_df = open_df[open_df["Department"].isin(selected_departments)]
 if selected_priorities:
-    open_df = open_df[
-        open_df["Priority"].isin(selected_priorities)
-    ]
-
+    open_df = open_df[open_df["Priority"].isin(selected_priorities)]
 if selected_statuses:
-    open_df = open_df[
-        open_df["Status"].isin(selected_statuses)
-    ]
+    open_df = open_df[open_df["Status"].isin(selected_statuses)]
 
 st.caption(f"Showing {len(open_df)} open task(s).")
 
 
 # ============================================================
-# EDITABLE TASK TABLE
+# EDITABLE TASK TABLE AND UPDATE EXCEL
 # ============================================================
 
 if not open_df.empty:
@@ -705,19 +621,10 @@ if not open_df.empty:
     ].copy()
 
     table_data["Due Date"] = pd.to_datetime(
-        table_data["Due Date"],
-        errors="coerce",
+        table_data["Due Date"], errors="coerce"
     ).dt.date
 
     editable_data = table_data.drop(columns=["_row_id"])
-
-    editor_priority_options = sorted(
-        set(priority_options + PRIORITY_VALUES)
-    )
-
-    editor_status_options = sorted(
-        set(status_options + STATUS_VALUES)
-    )
 
     edited_data = st.data_editor(
         editable_data,
@@ -727,29 +634,21 @@ if not open_df.empty:
         key="task_editor",
         column_config={
             "Task/ActionItem": st.column_config.TextColumn(
-                "Task",
-                required=True,
+                "Task", required=True
             ),
-            "Responsible": st.column_config.TextColumn(
-                "Responsible"
-            ),
-            "Area/Locations": st.column_config.TextColumn(
-                "Location"
-            ),
-            "Department": st.column_config.TextColumn(
-                "Department"
-            ),
+            "Responsible": st.column_config.TextColumn("Responsible"),
+            "Area/Locations": st.column_config.TextColumn("Location"),
+            "Department": st.column_config.TextColumn("Department"),
             "Priority": st.column_config.SelectboxColumn(
                 "Priority",
-                options=editor_priority_options,
+                options=sorted(set(priority_options + PRIORITY_VALUES)),
             ),
             "Due Date": st.column_config.DateColumn(
-                "Due Date",
-                format="DD-MM-YYYY",
+                "Due Date", format="DD-MM-YYYY"
             ),
             "Status": st.column_config.SelectboxColumn(
                 "Status",
-                options=editor_status_options,
+                options=sorted(set(status_options + STATUS_VALUES)),
             ),
         },
     )
@@ -766,106 +665,155 @@ if not open_df.empty:
         if blank_tasks.any():
             st.error("Task / Action Item cannot be blank.")
         else:
-            updated_df = df.copy()
-
-            for position in range(len(edited_data)):
-                original_row_id = int(
-                    table_data.iloc[position]["_row_id"]
-                )
-
-                row = edited_data.iloc[position]
-
-                updated_df.loc[
-                    original_row_id,
-                    "Task/ActionItem",
-                ] = str(row["Task/ActionItem"]).strip()
-
-                updated_df.loc[
-                    original_row_id,
-                    "Responsible",
-                ] = str(row["Responsible"]).strip()
-
-                updated_df.loc[
-                    original_row_id,
-                    "Area/Locations",
-                ] = str(row["Area/Locations"]).strip()
-
-                updated_df.loc[
-                    original_row_id,
-                    "Department",
-                ] = str(row["Department"]).strip()
-
-                updated_df.loc[
-                    original_row_id,
-                    "Priority",
-                ] = str(row["Priority"]).strip()
-
-                updated_df.loc[
-                    original_row_id,
-                    "Due Date",
-                ] = pd.to_datetime(
-                    row["Due Date"],
-                    errors="coerce",
-                )
-
-                updated_df.loc[
-                    original_row_id,
-                    "Status",
-                ] = str(row["Status"]).strip()
+            progress = st.progress(0, text="Preparing task updates...")
+            status_placeholder = st.empty()
 
             try:
-                save_excel(updated_df)
-                st.success("✅ Excel updated successfully.")
-                st.rerun()
+                updated_df = df.copy()
+                total_rows = len(edited_data)
 
-            except PermissionError:
-                st.error(
-                    "Unable to update tasks.xlsx. Close the workbook "
-                    "in Microsoft Excel and try again."
+                status_placeholder.info("Validating edited task data...")
+                progress.progress(15, text="Validating edited task data...")
+
+                for position in range(total_rows):
+                    original_row_id = int(
+                        table_data.iloc[position]["_row_id"]
+                    )
+                    row = edited_data.iloc[position]
+
+                    updated_df.loc[
+                        original_row_id, "Task/ActionItem"
+                    ] = str(row["Task/ActionItem"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Responsible"
+                    ] = str(row["Responsible"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Area/Locations"
+                    ] = str(row["Area/Locations"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Department"
+                    ] = str(row["Department"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Priority"
+                    ] = str(row["Priority"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Due Date"
+                    ] = pd.to_datetime(row["Due Date"], errors="coerce")
+                    updated_df.loc[
+                        original_row_id, "Status"
+                    ] = str(row["Status"]).strip()
+
+                    row_progress = 15 + int(
+                        ((position + 1) / total_rows) * 45
+                    )
+                    progress.progress(
+                        row_progress,
+                        text=f"Preparing row {position + 1} of {total_rows}...",
+                    )
+
+                status_placeholder.info("Writing changes to Excel...")
+                progress.progress(70, text="Writing changes to Excel...")
+
+                save_excel(updated_df)
+
+                progress.progress(90, text="Verifying the updated workbook...")
+
+                # Read the saved workbook again to confirm it is accessible.
+                verified_df = pd.read_excel(
+                    EXCEL_FILE,
+                    sheet_name=SHEET_NAME,
+                    engine="openpyxl",
                 )
 
-            except Exception as error:
-                st.error(f"Unable to update Excel: {error}")
+                if len(verified_df) != len(updated_df):
+                    raise IOError(
+                        "Saved workbook verification failed."
+                    )
 
+                saved_at = datetime.now().strftime(
+                    "%d-%b-%Y %H:%M:%S"
+                )
+
+                st.session_state.last_save = saved_at
+
+                progress.progress(
+                    100,
+                    text="Excel updated successfully."
+                )
+
+                status_placeholder.success(
+                    f"✅ Excel updated successfully at {saved_at}",
+                    icon="✅"
+                )
+
+                # Prepare download
+                excel_bytes = create_excel_download(updated_df)
+
+                st.download_button(
+                    label="📥 Download Updated Excel",
+                    data=excel_bytes,
+                    file_name=(
+                        "tasks_updated_"
+                        + datetime.now().strftime("%Y%m%d_%H%M%S")
+                        + ".xlsx"
+                    ),
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    use_container_width=True,
+                )
+
+            except PermissionError:
+                progress.empty()
+                status_placeholder.error(
+                    "Update failed. Close tasks.xlsx in Microsoft Excel "
+                    "and try again."
+                )
+            except Exception as error:
+                progress.empty()
+                status_placeholder.error(
+                    f"Excel update failed: {error}"
+                )
 else:
     st.success("🎉 No open tasks match the current filters.")
 
 
 # ============================================================
-# DOWNLOAD EXCEL
+# DOWNLOAD UPDATED EXCEL
 # ============================================================
 
 st.divider()
-
-st.markdown("### 📥 Export Tasks")
+st.markdown("### 📥 Download Updated Excel")
 
 try:
-    with open(EXCEL_FILE, "rb") as file:
-
-        st.download_button(
-            label="📊 Download Updated Excel",
-            data=file.read(),
-            file_name=f"tasks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-
-except Exception as error:
-
-    st.error(
-        f"Unable to prepare Excel file for download: {error}"
+    download_bytes = create_excel_download(df)
+    download_name = (
+        "tasks_updated_"
+        + datetime.now().strftime("%Y%m%d_%H%M%S")
+        + ".xlsx"
     )
+
+    st.download_button(
+        label="📊 Download Updated Excel",
+        data=download_bytes,
+        file_name=download_name,
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        use_container_width=True,
+    )
+except Exception as error:
+    st.error(f"Unable to prepare the Excel download: {error}")
+
 
 # ============================================================
 # FOOTER
 # ============================================================
 
 st.divider()
-
-st.caption(
-    "A task is considered completed only when Status = Close."
-)
-
+st.caption("A task is considered completed only when Status = Close.")
 st.caption(
     "Last dashboard refresh: "
     + datetime.now().strftime("%d-%b-%Y %H:%M:%S")
