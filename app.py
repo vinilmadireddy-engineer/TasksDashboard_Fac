@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -162,6 +163,15 @@ def load_excel(file_path, modified_time):
     loaded_df["_row_id"] = loaded_df.index
     return loaded_df
 
+# ============================================================
+# IST TIME
+# ============================================================
+
+def get_ist_time():
+
+    return datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    )
 
 def save_excel(dataframe):
     """Safely save tasks and verify that the written workbook is readable."""
@@ -387,7 +397,7 @@ with st.expander("➕ Add New Task", expanded=False):
                 progress.progress(65, text="Writing the new task to Excel...")
                 save_excel(updated_df)
 
-                saved_at = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+                saved_at = get_ist_time().now().strftime("%d-%b-%Y %H:%M:%S")
                 st.session_state.last_save = saved_at
                 st.session_state.save_message = (
                     f"Task '{clean_task_name}' was added and Excel was "
@@ -730,7 +740,7 @@ if not open_df.empty:
                         "Saved workbook verification failed."
                     )
 
-                saved_at = datetime.now().strftime(
+                saved_at = get_ist_time().now().strftime(
                     "%d-%b-%Y %H:%M:%S"
                 )
 
@@ -754,7 +764,7 @@ if not open_df.empty:
                     data=excel_bytes,
                     file_name=(
                         "tasks_updated_"
-                        + datetime.now().strftime("%Y%m%d_%H%M%S")
+                        + get_ist_time().now().strftime("%Y%m%d_%H%M%S")
                         + ".xlsx"
                     ),
                     mime=(
@@ -794,5 +804,5 @@ st.divider()
 st.caption("A task is considered completed only when Status = Close.")
 st.caption(
     "Last dashboard refresh: "
-    + datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    + get_ist_time().now().strftime("%d-%b-%Y %H:%M:%S")
 )
