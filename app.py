@@ -832,6 +832,31 @@ else:
 
 
 # ============================================================
+# DOWNLOAD EXCEL
+# ============================================================
+
+st.divider()
+
+st.markdown("### 📥 Export Tasks")
+
+try:
+    with open(EXCEL_FILE, "rb") as file:
+
+        st.download_button(
+            label="📊 Download Updated Excel",
+            data=file.read(),
+            file_name=f"tasks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+except Exception as error:
+
+    st.error(
+        f"Unable to prepare Excel file for download: {error}"
+    )
+
+# ============================================================
 # FOOTER
 # ============================================================
 
