@@ -37,15 +37,19 @@ STATUS_VALUES = ["Open", "In Progress", "Close"]
 
 
 # ============================================================
-# STYLING
-# ============================================================
-# ============================================================
 # STYLING WITH ANIMATED BACKGROUND + PARTICLES
 # ============================================================
 
 st.markdown(
     """
     <style>
+    /* Remove default white space at top */
+    html, body, .stApp {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
     /* Animated gradient background */
     .stApp {
         background: linear-gradient(-45deg, #1e3a8a, #9333ea, #f43f5e, #22c55e);
@@ -89,6 +93,9 @@ st.markdown(
         background: transparent !important;
         position: relative;
         z-index: 1; /* ensure content stays above particles */
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        max-width: 1500px;
     }
 
     /* === Preserve your original styles === */
@@ -138,6 +145,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
