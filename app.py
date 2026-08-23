@@ -30,6 +30,7 @@ REQUIRED_COLUMNS = [
     "Priority",
     "Due Date",
     "Status",
+    "Comments"
 ]
 
 PRIORITY_VALUES = ["Low", "Medium", "High", "Critical"]
