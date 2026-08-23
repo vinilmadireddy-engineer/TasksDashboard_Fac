@@ -39,11 +39,6 @@ STATUS_VALUES = ["Open", "In Progress", "Close"]
 # ============================================================
 # STYLING
 # ============================================================
-
-# ============================================================
-# STYLING
-# ============================================================
-
 # ============================================================
 # STYLING WITH ANIMATED BACKGROUND + PARTICLES
 # ============================================================
@@ -89,16 +84,55 @@ st.markdown(
         to { transform: translate(100px, 100px); }
     }
 
-    /* Keep containers transparent */
+    /* Keep containers transparent so background shows */
     .block-container {
         background: transparent !important;
         position: relative;
         z-index: 1; /* ensure content stays above particles */
     }
 
-    /* Text contrast */
-    h1, h2, h3, h4, h5, h6, p, div {
-        color: #f9fafb !important;
+    /* === Preserve your original styles === */
+    .header {
+        background: linear-gradient(135deg, #0f172a, #155e75);
+        padding: 25px 30px;
+        border-radius: 18px;
+        color: white;
+        margin-bottom: 20px;
+    }
+
+    .header h1 {
+        margin: 0;
+        font-size: 32px;
+    }
+
+    .header p {
+        margin-top: 8px;
+        margin-bottom: 0;
+        opacity: 0.85;
+    }
+
+    .progress-container {
+        background: #e5e7eb;
+        border-radius: 20px;
+        height: 30px;
+        width: 100%;
+        overflow: hidden;
+        margin-top: 20px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        border-radius: 20px;
+        background: linear-gradient(90deg, #22c55e, #06b6d4);
+        transition: width 0.5s ease;
+    }
+
+    .progress-text {
+        text-align: center;
+        font-size: 22px;
+        font-weight: bold;
+        margin-top: 10px;
+        color: #111827; /* dark text so it's visible */
     }
     </style>
     """,
