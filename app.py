@@ -406,6 +406,11 @@ with st.expander("➕ Add New Task", expanded=False):
             options=STATUS_VALUES,
             index=0,
         )
+        comments = st.text_area(
+            "Comments",
+             placeholder="Add any notes or comments about this task",
+        )
+
 
         add_task_submitted = st.form_submit_button(
             "➕ Add Task",
@@ -441,6 +446,7 @@ with st.expander("➕ Add New Task", expanded=False):
                             else pd.NaT
                         ),
                         "Status": status,
+                        "Comments": comments.strip(),
                     }]
                 )
 
@@ -685,6 +691,7 @@ if not open_df.empty:
             "Priority",
             "Due Date",
             "Status",
+            "Comments",
         ]
     ].copy()
 
@@ -718,6 +725,7 @@ if not open_df.empty:
                 "Status",
                 options=sorted(set(status_options + STATUS_VALUES)),
             ),
+            "Comments": st.column_config.TextColumn("Comments"),
         },
     )
 
@@ -770,6 +778,10 @@ if not open_df.empty:
                     updated_df.loc[
                         original_row_id, "Status"
                     ] = str(row["Status"]).strip()
+                    updated_df.loc[
+                        original_row_id, "Comments"
+                    ] = str(row["Comments"]).strip()
+
 
                     row_progress = 15 + int(
                         ((position + 1) / total_rows) * 45
