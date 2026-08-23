@@ -44,63 +44,19 @@ STATUS_VALUES = ["Open", "In Progress", "Close"]
 # STYLING
 # ============================================================
 
+# ============================================================
+# STYLING WITH ANIMATED BACKGROUND + PARTICLES
+# ============================================================
+
 st.markdown(
     """
     <style>
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-        max-width: 1500px;
-    }
-
-    .header {
-        background: linear-gradient(135deg, #0f172a, #155e75);
-        padding: 25px 30px;
-        border-radius: 18px;
-        color: white;
-        margin-bottom: 20px;
-    }
-
-    .header h1 {
-        margin: 0;
-        font-size: 32px;
-    }
-
-    .header p {
-        margin-top: 8px;
-        margin-bottom: 0;
-        opacity: 0.85;
-    }
-
-    .progress-container {
-        background: #e5e7eb;
-        border-radius: 20px;
-        height: 30px;
-        width: 100%;
-        overflow: hidden;
-        margin-top: 20px;
-    }
-
-    .progress-bar {
-        height: 100%;
-        border-radius: 20px;
-        background: linear-gradient(90deg, #22c55e, #06b6d4);
-        transition: width 0.5s ease;
-    }
-
-    .progress-text {
-        text-align: center;
-        font-size: 22px;
-        font-weight: bold;
-        margin-top: 10px;
-    }
-
-    /* === Animated Background === */
-    body {
+    /* Animated gradient background */
+    .stApp {
         background: linear-gradient(-45deg, #1e3a8a, #9333ea, #f43f5e, #22c55e);
         background-size: 400% 400%;
         animation: gradientBG 15s ease infinite;
-        color: white;
+        overflow: hidden; /* ensures particles stay inside */
     }
 
     @keyframes gradientBG {
@@ -109,10 +65,38 @@ st.markdown(
         100% {background-position: 0% 50%;}
     }
 
-    .block-container {
-        background: transparent !important;
+    /* Floating particles (bubbles) */
+    .stApp::before, .stApp::after {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background-repeat: repeat;
+        background-image: radial-gradient(circle, rgba(255,255,255,0.15) 2px, transparent 2px);
+        animation: moveParticles 60s linear infinite;
+        z-index: 0; /* keep particles behind content */
     }
 
+    .stApp::after {
+        animation-duration: 90s;
+        opacity: 0.5;
+    }
+
+    @keyframes moveParticles {
+        from { transform: translate(0,0); }
+        to { transform: translate(100px, 100px); }
+    }
+
+    /* Keep containers transparent */
+    .block-container {
+        background: transparent !important;
+        position: relative;
+        z-index: 1; /* ensure content stays above particles */
+    }
+
+    /* Text contrast */
     h1, h2, h3, h4, h5, h6, p, div {
         color: #f9fafb !important;
     }
@@ -120,6 +104,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
