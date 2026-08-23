@@ -40,6 +40,10 @@ STATUS_VALUES = ["Open", "In Progress", "Close"]
 # STYLING
 # ============================================================
 
+# ============================================================
+# STYLING
+# ============================================================
+
 st.markdown(
     """
     <style>
@@ -90,10 +94,33 @@ st.markdown(
         font-weight: bold;
         margin-top: 10px;
     }
+
+    /* === Animated Background === */
+    body {
+        background: linear-gradient(-45deg, #1e3a8a, #9333ea, #f43f5e, #22c55e);
+        background-size: 400% 400%;
+        animation: gradientBG 15s ease infinite;
+        color: white;
+    }
+
+    @keyframes gradientBG {
+        0% {background-position: 0% 50%;}
+        50% {background-position: 100% 50%;}
+        100% {background-position: 0% 50%;}
+    }
+
+    .block-container {
+        background: transparent !important;
+    }
+
+    h1, h2, h3, h4, h5, h6, p, div {
+        color: #f9fafb !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
 
 
 # ============================================================
