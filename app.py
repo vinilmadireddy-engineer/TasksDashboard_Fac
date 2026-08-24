@@ -13,7 +13,7 @@ import streamlit as st
 # ============================================================
 
 st.set_page_config(
-    page_title="GR/FCM-Ban OPL Points",
+    page_title="GR/FCM-Ban OPL Dashboard",
     page_icon="📊",
     layout="wide",
 )
@@ -283,7 +283,7 @@ def create_excel_download(dataframe):
 st.markdown(
     """
     <div class="header">
-        <h1>📊 GR/FCM-Ban OPL Points</h1>
+        <h1>📊 GR/FCM-Ban OPL Dashboard</h1>
         <p>Task management and progress monitoring</p>
     </div>
     """,
@@ -821,7 +821,7 @@ if not open_df.empty:
                 options=sorted(set(status_options + STATUS_VALUES)),
             ),
             "Comments": st.column_config.TextColumn("Comments"),  # ✅ safe now
-            "Completion Status": st.column_config.ProgressColumn(
+            "Completion Status": st.column_config.NumberColumn(
                 "Completion Status",
                 min_value=0,
                 max_value=100,
