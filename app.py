@@ -13,7 +13,7 @@ import streamlit as st
 # ============================================================
 
 st.set_page_config(
-    page_title="GR/FCM-Ban OPL Points",
+    page_title="GR/FCM-Ban OPL Dashboard",
     page_icon="📊",
     layout="wide",
 )
@@ -306,7 +306,7 @@ def create_excel_download(dataframe):
 st.markdown(
     """
     <div class="header">
-        <h1>📊 GR/FCM-Ban OPL Points</h1>
+        <h1>📊 GR/FCM-Ban OPL Dashboard</h1>
         <p>Task management and progress monitoring</p>
     </div>
     """,
