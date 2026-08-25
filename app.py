@@ -36,7 +36,7 @@ REQUIRED_COLUMNS = [
 
 PRIORITY_VALUES = ["Low", "Medium", "High", "Critical"]
 STATUS_VALUES = ["Open", "In Progress", "Close"]
-COMPLETION_STATUS_VALUES = [0, 10, 20, 30, 40, 50, 70, 80, 90, 100]
+COMPLETION_STATUS_VALUES = ["0%", "10%", "20%", "30%", "40%", "50%", "70%", "80%", "90%", "100%"]
 
 # ============================================================
 # STYLING WITH SINGLE COLOR BACKGROUND
@@ -183,16 +183,9 @@ def load_excel(file_path, modified_time):
         "Priority",
         "Status",
     ]
-    loaded_df["Completion Status"] = (
-        pd.to_numeric(loaded_df["Completion Status"], errors="coerce")
-        .fillna(COMPLETION_STATUS_VALUES[0])
-        .round()
-        .astype(int)
-    )
-    loaded_df["Completion Status"] = loaded_df["Completion Status"].where(
-        loaded_df["Completion Status"].isin(COMPLETION_STATUS_VALUES),
-        COMPLETION_STATUS_VALUES[0],
-    )
+    loaded_df["Completion Status"] = loaded_df[
+        "Completion Status"
+    ].map(normalize_completion_value)
 
     for column in text_columns:
         loaded_df[column] = (
@@ -267,15 +260,25 @@ def unique_non_empty_values(series):
 
 def synchronize_status_and_completion(status, completion):
     clean_status = str(status).strip()
-    if pd.isna(completion) or str(completion).strip() == "":
-        completion_value = 0
-    else:
-        completion_value = int(float(completion))
+    completion_value = normalize_completion_value(completion)
 
-    if clean_status.casefold() == "close" or completion_value == 100:
-        return "Close", 100
+    if clean_status.casefold() == "close" or completion_value == "100%":
+        return "Close", "100%"
 
     return clean_status, completion_value
+
+
+def normalize_completion_value(completion):
+    if pd.isna(completion) or str(completion).strip() == "":
+        return "0%"
+
+    try:
+        numeric_value = int(float(str(completion).strip().rstrip("%")))
+    except (TypeError, ValueError):
+        return "0%"
+
+    value = f"{numeric_value}%"
+    return value if value in COMPLETION_STATUS_VALUES else "0%"
 
 
 def format_date(value):
@@ -817,9 +820,9 @@ if not open_df.empty:
 
     # ✅ Force Comments to string to avoid type mismatch
     table_data["Comments"] = table_data["Comments"].astype(str)
-    table_data["Completion Status"] = pd.to_numeric(
-        table_data["Completion Status"], errors="coerce"
-    ).fillna(COMPLETION_STATUS_VALUES[0]).astype(int)
+    table_data["Completion Status"] = table_data[
+        "Completion Status"
+    ].map(normalize_completion_value)
 
     editable_data = table_data.drop(columns=["_row_id"])
 
